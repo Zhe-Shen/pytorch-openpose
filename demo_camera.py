@@ -11,27 +11,42 @@ import numpy as np
 import scipy.misc
 from Hand_Detection import detect_hand
 from PIL import Image
+from load_image import read_image
+import random
 
+def parsearg():
+    if len(sys.argv) > 1:
+        if sys.argv[1] == 'reload':
+            return True
+    return False
+
+flag = parsearg()
+imglist = read_image(['ring_modified'])
+flag = True
 body_estimation = Body('model/body_pose_model.pth')
 hand_estimation = Hand('model/hand_pose_model.pth')
 bias = 20
 #bias2 = 5
-cap = cv2.VideoCapture('video/lhyhand.mp4')
+cap = cv2.VideoCapture('video/myhand2.mp4')
+fps = cap.get(5)
+print(fps)
 ret, oriImg = cap.read()
-vid_writer = cv2.VideoWriter('lhy.mp4', cv2.VideoWriter_fourcc(*'mp4v'), 15, (oriImg.shape[1],oriImg.shape[0]))
+vid_writer = cv2.VideoWriter('newhand2.mp4', cv2.VideoWriter_fourcc(*'mp4v'), fps, (oriImg.shape[1],oriImg.shape[0]))
 print(oriImg.shape[1],oriImg.shape[0])
 #img2 = Image.open('images/earring.jpg')
 #img3 = Image.open('images/necklace2.jpg')
 img4 = Image.open('images/ring2.jpg')
 #img2 = scipy.misc.imresize(img2, (70, 30))
 #img3 = scipy.misc.imresize(img3, (250, 300))
-img4 = scipy.misc.imresize(img4, (60, 60))
+#img4 = scipy.misc.imresize(img4, (60, 60))
 #print(img2.shape)
 #rows,cols,channels = img2.shape
 #rows3,cols3,channels3 = img3.shape
 #rows,cols,channels = img4.shape
 #cap.set(3, 640)
 #cap.set(4, 480)
+c_ring = 0.7
+rows, cols, channels = [60, 60, 3]
 
 def Angle(v1,v2):
     dot = np.dot(v1,v2)
@@ -40,6 +55,9 @@ def Angle(v1,v2):
     cos_angle = dot / x_modulus / y_modulus
     angle = np.degrees(np.arccos(cos_angle))
     return angle
+
+def FindDistance(A,B): 
+    return np.sqrt(np.power((A[0]-B[0]),2) + np.power((A[1]-B[1]),2)) 
 
 def rotate_image(img, angle, crop):
     """
@@ -85,7 +103,7 @@ def rotate_image(img, angle, crop):
 
     return img_rotated
 
-
+count = 0
 while True:
     ret, oriImg = cap.read()
     if not ret:
@@ -95,85 +113,51 @@ while True:
     oriImg = cv2.cvtColor(np.asarray(oriImg),cv2.COLOR_RGB2BGR)
     #candidate, subset = body_estimation(oriImg)
     #print(candidate, subset)
-    '''
-    if len(candidate) != len(subset[0]):
-        for i in range(len(subset[0])-2):
-            if subset[0][i] != -1 and (candidate[int(subset[0][i])][0] == oriImg.shape[1]-1 or candidate[int(subset[0][i])][1] == oriImg.shape[0]-1):
-                subset[0][i] = -1
-    '''
-    canvas = copy.deepcopy(oriImg)
     ring = copy.deepcopy(img4)
+    canvas = copy.deepcopy(oriImg)
+    #ring = copy.deepcopy(img4)
     #canvas = Image.fromarray(cv2.cvtColor(canvas,cv2.COLOR_BGR2RGB))
     #canvas = canvas.transpose(Image.FLIP_LEFT_RIGHT)
     #canvas = util.draw_bodypose(canvas, candidate, subset)
-    '''
-    point = candidate[int(subset[0][16])]
-    point2 = candidate[int(subset[0][17])]
-    point3 = candidate[int(subset[0][1])]
-    #img2 = np.array(img2)
-    #print(img2.shape)
-    #print(img2[0].shape)
     
-    
-    roi = canvas[int(point[1] + bias) : int(point[1] + rows + bias), int(point[0] - cols/2) : int(point[0] + cols/2)]
-    roi2 = canvas[int(point2[1] + bias) : int(point2[1] + rows + bias), int(point2[0] - cols/2) : int(point2[0] + cols/2)]
-    roi3 = canvas[int(point3[1] - rows3/2) : int(point3[1] + rows3/2), int(point3[0] - cols3/2) : int(point3[0] + cols3/2)]
-    # Now create a mask of logo and create its inverse mask also
-    img2gray = cv2.cvtColor(img2,cv2.COLOR_BGR2GRAY)
-    ret, mask = cv2.threshold(img2gray, 200, 255, cv2.THRESH_BINARY)
-    mask_inv = cv2.bitwise_not(mask)
-
-    img3gray = cv2.cvtColor(img3,cv2.COLOR_BGR2GRAY)
-    ret3, mask3 = cv2.threshold(img3gray, 200, 255, cv2.THRESH_BINARY)
-    mask_inv3 = cv2.bitwise_not(mask3)
-    # Now black-out the area of logo in ROI
-    print(roi2.shape, mask.shape)
-    if roi.shape[0] == mask.shape[0] and roi.shape[1] == mask.shape[1]:
-        img1_bg = cv2.bitwise_and(roi,roi,mask = np.uint8(mask))
-    if roi2.shape[0] == mask.shape[0] and roi2.shape[1] == mask.shape[1]:
-        img1_bg2 = cv2.bitwise_and(roi2,roi2,mask = np.uint8(mask))
-    if roi3.shape[0] == mask3.shape[0] and roi3.shape[1] == mask3.shape[1]:
-        img1_bg3 = cv2.bitwise_and(roi3,roi3,mask = np.uint8(mask3))
-    # Take only region of logo from logo image.
-    img2_fg = cv2.bitwise_and(img2,img2,mask = np.uint8(mask_inv))
-    img3_fg = cv2.bitwise_and(img3,img3,mask = np.uint8(mask_inv3))
-    #print(img1_bg.shape)
-    #print(img2_fg[:][:][:3].shape)
-    # Put logo in ROI and modify the main image
-    #print(type(img2_fg))
-    
-    if roi.shape[0] == mask.shape[0] and roi.shape[1] == mask.shape[1]:
-        dst = cv2.add(img1_bg, img2_fg[:, :, (2, 1, 0)])
-    if roi2.shape[0] == mask.shape[0] and roi2.shape[1] == mask.shape[1]:
-        dst2 = cv2.add(img1_bg2, img2_fg[:, :, (2, 1, 0)])
-    if roi3.shape[0] == mask3.shape[0] and roi3.shape[1] == mask3.shape[1]:
-        dst3 = cv2.add(img1_bg3, img3_fg[:, :, (2, 1, 0)])
-    
-    if roi.shape[0] == mask.shape[0] and roi.shape[1] == mask.shape[1]:
-        canvas[int(point[1] + bias) : int(point[1] + rows + bias), int(point[0] - cols/2) : int(point[0] + cols/2)] = dst
-    if roi2.shape[0] == mask.shape[0] and roi2.shape[1] == mask.shape[1]:
-        canvas[int(point2[1] + bias) : int(point2[1] + rows + bias), int(point2[0] - cols/2) : int(point2[0] + cols/2)] = dst2
-    if roi3.shape[0] == mask3.shape[0] and roi3.shape[1] == mask3.shape[1]:
-        canvas[int(point3[1] - rows3/2) : int(point3[1] + rows3/2), int(point3[0] - cols3/2) : int(point3[0] + cols3/2)] = dst3
-    '''
     # detect hand
     #hands_list = util.handDetect(candidate, subset, oriImg)
     #canvas = cv2.cvtColor(np.asarray(canvas),cv2.COLOR_RGB2BGR)
-    hands_list = detect_hand(canvas)
-    #print(hands_list)
-    all_hand_peaks = []
-    for x, y, w, is_left in hands_list:
-        peaks = hand_estimation(oriImg[y:y+w, x:x+w, :])
-        peaks[:, 0] = np.where(peaks[:, 0]==0, peaks[:, 0], peaks[:, 0]+x)
-        peaks[:, 1] = np.where(peaks[:, 1]==0, peaks[:, 1], peaks[:, 1]+y)
-        all_hand_peaks.append(peaks)
-    print(all_hand_peaks)
+    if count%int(fps/10) == 0:
+        hands_list = detect_hand(canvas)
+        #print(hands_list)
+        all_hand_peaks = []
+        for x, y, w, is_left in hands_list:
+            peaks = hand_estimation(oriImg[y:y+w, x:x+w, :])
+            peaks[:, 0] = np.where(peaks[:, 0]==0, peaks[:, 0], peaks[:, 0]+x)
+            peaks[:, 1] = np.where(peaks[:, 1]==0, peaks[:, 1], peaks[:, 1]+y)
+            all_hand_peaks.append(peaks)
+        print(all_hand_peaks)
     p1 = all_hand_peaks[0][13]
     p2 = all_hand_peaks[0][14]
+    dis = FindDistance(p1, p2)
+    if dis == 0:
+        canvas = Image.fromarray(cv2.cvtColor(canvas,cv2.COLOR_BGR2RGB))
+        canvas = canvas.transpose(Image.FLIP_LEFT_RIGHT)
+        canvas = cv2.cvtColor(np.asarray(canvas),cv2.COLOR_RGB2BGR)
+        vid_writer.write(canvas)
+        count += 1
+        continue
+    else:
+        ring = scipy.misc.imresize(ring, (int(c_ring*dis), int(c_ring*dis)))
+        rows,cols,channels = ring.shape
+    #print(count)
+    #if flag and count%15 == 0:
+        #iring = random.randint(0, len(imglist[0]) - 1)
+        #temp = imglist[0][iring]
+        #temp = scipy.misc.imresize(temp, (int(c_ring*dis), int(c_ring*dis)))
+        #rows,cols,channels = ring.shape
+    
     if not ((p1[0] == 0 and p1[1] == 0) or (p2[0] == 0 and p2[1] == 0)):
         degree = Angle(p1 - p2, np.array([1, 0]))
         print(degree)
         crop_image = lambda ring, x0, y0, w, h: ring[x0:x0+w, y0:y0+h]
+        
         ring = rotate_image(ring, 90 - degree, True)
         #ring = Image.fromarray(cv2.cvtColor(ring,cv2.COLOR_BGR2RGB))
         #ring = ring.rotate(90 - degree)
@@ -184,7 +168,7 @@ while True:
         p = p1/3 + 2*p2/3
         roi = canvas[int(p[1] - rows/2): int(p[1] + rows/2), int(p[0] - cols/2): int(p[0] + cols/2)]
 
-        img2gray = cv2.cvtColor(ring,cv2.COLOR_BGR2GRAY)
+        img2gray = cv2.cvtColor(ring, cv2.COLOR_BGR2GRAY)
         ret, mask = cv2.threshold(img2gray, 200, 255, cv2.THRESH_BINARY)
         mask_inv = cv2.bitwise_not(mask)
         img1_bg = cv2.bitwise_and(roi,roi,mask = np.uint8(mask))
@@ -197,12 +181,13 @@ while True:
     canvas = canvas.transpose(Image.FLIP_LEFT_RIGHT)
     canvas = cv2.cvtColor(np.asarray(canvas),cv2.COLOR_RGB2BGR)
     
-    cv2.imshow('demo', canvas)#一个窗口用以显示原视频
+    #cv2.imshow('demo', canvas)#一个窗口用以显示原视频
     
     key = cv2.waitKey(1)
     if key == 27:
         break
     vid_writer.write(canvas)
+    count += 1
 
 vid_writer.release()
 cv2.destroyAllWindows()
